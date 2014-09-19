@@ -41,17 +41,17 @@ class Resolver<T> {
 var key = "PMKSomeString"
 
 extension UIViewController {
-    func fulfill<T>(value:T) {
+    public func fulfill<T>(value:T) {
         let resolver = objc_getAssociatedObject(self, &key) as Resolver<T>
         resolver.fulfiller(value)
     }
 
-    func reject(error:NSError) {
+    public func reject(error:NSError) {
         let resolver = objc_getAssociatedObject(self, &key) as Resolver<Any>;
         resolver.rejecter(error)
     }
 
-    public func promiseViewController<T>(vc: UIViewController, animated: Bool = true, completion:(Void)->() = {}) -> Promise<T> {
+	public func promiseViewController<T>(vc: UIViewController, animated: Bool = true, completion:(Void)->() = {}) -> Promise<T> {
         presentViewController(vc, animated:animated, completion:completion)
 
         let deferred = Promise<T>.defer()
