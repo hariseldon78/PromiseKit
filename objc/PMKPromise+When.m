@@ -50,6 +50,7 @@
 
     return [PMKPromise new:^(PMKPromiseFulfiller fulfiller, PMKPromiseRejecter rejecter){
         NSPointerArray *results = nil;
+      #ifdef TARGET_OS_MAC
         if ([[NSPointerArray class] respondsToSelector:@selector(strongObjectsPointerArray)]) {
             results = [NSPointerArray strongObjectsPointerArray];
         } else {
@@ -58,6 +59,9 @@
             results = [NSPointerArray pointerArrayWithStrongObjects];
           #pragma clang diagnostic pop
         }
+      #else
+        NSPointerArrayresults = [NSPointerArray strongObjectsPointerArray];
+      #endif
         results.count = count;
 
         NSUInteger ii = 0;
