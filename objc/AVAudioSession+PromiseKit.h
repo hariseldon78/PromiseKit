@@ -11,6 +11,7 @@
 
 @interface AVAudioSession (PromiseKit)
 
-- (PMKPromise *)promiseForRequestRecordPermission;
+- (PMKPromise *)promiseForRequestRecordPermission PMK_DEPRECATED("Use -requestRecordPermission");
+- (PMKPromise *)requestRecordPermission;
 
 @end
