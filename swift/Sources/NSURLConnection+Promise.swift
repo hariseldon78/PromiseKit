@@ -1,55 +1,29 @@
 import Foundation
-import UIKit
-
-let PMKOperationQueue = NSOperationQueue()
+import UIKit.UIImage
 
 
-func _parse<T>(data:NSData, fulfiller:(T) -> Void, rejecter:(NSError) -> Void) {
-    assert(!NSThread.isMainThread())
-
-    var error:NSError?
-    let json:AnyObject? = NSJSONSerialization.JSONObjectWithData(data, options:nil, error:&error)
-
-    if error != nil {
-        rejecter(error!)
-    } else if let cast = json as? T {
-        fulfiller(cast)
-    } else {
-        var info:Dictionary = [:]
-        info[NSLocalizedDescriptionKey] = "The server returned JSON in an unexpected arrangement"
-        if let jo:AnyObject = json { info[PMKJSONErrorJSONObjectKey] = jo }
-        rejecter(NSError(domain:PMKErrorDomain, code:PMKJSONError, userInfo:info))
+extension NSURLResponse {
+    private var stringEncoding: UInt {
+        if let encodingName = textEncodingName {
+            let encoding = CFStringConvertIANACharSetNameToEncoding(encodingName)
+            if encoding != kCFStringEncodingInvalidId {
+                return CFStringConvertEncodingToNSStringEncoding(encoding)
+            }
+        }
+        return NSUTF8StringEncoding
     }
 }
 
-func PMKUserAgent() -> String {
-    struct Static {
-        static var instance: String? = nil
-        static var token: dispatch_once_t = 0
-    }
-    dispatch_once(&Static.token, {
-        let info = NSBundle.mainBundle().infoDictionary
-        let name:AnyObject? = info[kCFBundleIdentifierKey]
-        let appv:AnyObject? = info[kCFBundleVersionKey]
-        let scale = UInt(UIScreen.mainScreen().scale)
-        let model = UIDevice.currentDevice().model
-        let sysv = UIDevice.currentDevice().systemVersion
-        Static.instance = "\(name)/\(appv) (\(model); iOS \(sysv); Scale/\(scale).0"
-    })
-    return Static.instance!
-}
 
-
-func fetch<T>(var request: NSURLRequest, body: ((T) -> Void, (NSError) -> Void, NSData) -> Void) -> Promise<T> {
-
+private func fetch<T>(var request: NSURLRequest, body: ((T) -> Void, (NSError) -> Void, NSData, NSURLResponse) -> Void) -> Promise<T> {
     if request.valueForHTTPHeaderField("User-Agent") == nil {
         let rq = request.mutableCopy() as NSMutableURLRequest
-        rq.setValue(PMKUserAgent(), forHTTPHeaderField:"User-Agent")
+        rq.setValue(OMGUserAgent(), forHTTPHeaderField:"User-Agent")
         request = rq
     }
 
     return Promise<T> { (fulfiller, rejunker) in
-        NSURLConnection.sendAsynchronousRequest(request, queue:PMKOperationQueue) { (rsp, data, err) in
+        NSURLConnection.sendAsynchronousRequest(request, queue:Q) { (rsp, data, err) in
 
             assert(!NSThread.isMainThread())
 
@@ -60,7 +34,12 @@ func fetch<T>(var request: NSURLRequest, body: ((T) -> Void, (NSError) -> Void, 
                 let info = NSMutableDictionary(dictionary: error.userInfo ?? [:])
                 info[NSURLErrorFailingURLErrorKey] = request.URL
                 info[NSURLErrorFailingURLStringErrorKey] = request.URL.absoluteString
-                if data != nil { info[PMKURLErrorFailingDataKey] = data! }
+                if data != nil {
+                    info[PMKURLErrorFailingDataKey] = data!
+                    if let str = NSString(data: data, encoding: rsp.stringEncoding) {
+                        info[PMKURLErrorFailingStringKey] = str
+                    }
+                }
                 if rsp != nil { info[PMKURLErrorFailingURLResponseKey] = rsp! }
                 rejunker(NSError(domain:error.domain, code:error.code, userInfo:info))
             }
@@ -68,8 +47,51 @@ func fetch<T>(var request: NSURLRequest, body: ((T) -> Void, (NSError) -> Void, 
             if err != nil {
                 rejecter(err)
             } else {
-                body(fulfiller, rejecter, data!)
+                body(fulfiller, rejecter, data!, rsp)
             }
+        }
+    }
+}
+
+func NSJSONFromData(data: NSData) -> Promise<NSArray> {
+    // work around ever-so-common Rails issue: https://github.com/rails/rails/issues/1742
+    if data.isEqualToData(NSData(bytes: " ", length: 1)) {
+        return Promise(value: NSArray())  // couldn’t do T() in generic function
+    }
+    return NSJSONFromDataT(data)
+}
+
+func NSJSONFromData(data: NSData) -> Promise<NSDictionary> {
+    if data.isEqualToData(NSData(bytes: " ", length: 1)) {
+        return Promise(value: NSDictionary())
+    }
+    return NSJSONFromDataT(data)
+}
+
+private func NSJSONFromDataT<T>(data: NSData) -> Promise<T> {
+    var error:NSError?
+    let json:AnyObject? = NSJSONSerialization.JSONObjectWithData(data, options:nil, error:&error)
+
+    if error != nil {
+        return Promise(error: error!)
+    } else if let cast = json as? T {
+        return Promise(value: cast)
+    } else {
+        var info = NSMutableDictionary()
+        info[NSLocalizedDescriptionKey] = "The server returned JSON in an unexpected arrangement"
+        if let jo:AnyObject = json { info[PMKJSONErrorJSONObjectKey] = jo }
+        let error = NSError(domain:PMKErrorDomain, code:PMKJSONError, userInfo:info)
+        return Promise(error: error)
+    }
+}
+
+private func fetchJSON<T>(request: NSURLRequest) -> Promise<T> {
+    return fetch(request) { (fulfill, reject, data, _) in
+        let result: Promise<T> = NSJSONFromDataT(data)
+        if result.fulfilled {
+            fulfill(result.value!)
+        } else {
+            reject(result.error!)
         }
     }
 }
@@ -77,113 +99,132 @@ func fetch<T>(var request: NSURLRequest, body: ((T) -> Void, (NSError) -> Void, 
 
 extension NSURLConnection {
 
-    // Swift generics are not 100% capable yet, hence the repetition
+    // I couldn’t persuade Swift to process these generically hence the lack of DRY
 
     public class func GET(url:String) -> Promise<NSData> {
-        let rq = NSURLRequest(URL:NSURL(string:url))
-        return promise(rq)
+        return promise(NSURLRequest(URL:NSURL(string:url)!))
     }
     public class func GET(url:String) -> Promise<String> {
-        let rq = NSURLRequest(URL:NSURL(string:url))
-        return promise(rq)
+        return promise(NSURLRequest(URL:NSURL(string:url)!))
     }
     public class func GET(url:String) -> Promise<UIImage> {
-        let rq = NSURLRequest(URL:NSURL(string:url))
-        return promise(rq)
+        return promise(NSURLRequest(URL:NSURL(string:url)!))
     }
     public class func GET(url:String) -> Promise<NSArray> {
-        let rq = NSURLRequest(URL:NSURL(string:url))
-        return promise(rq)
+        return promise(NSURLRequest(URL:NSURL(string:url)!))
     }
     public class func GET(url:String) -> Promise<NSDictionary> {
-        return promise(NSURLRequest(URL:NSURL(string:url)))
+        return promise(NSURLRequest(URL:NSURL(string:url)!))
     }
-    public class func GET(url:String, query:Dictionary<String, String>) -> Promise<NSDictionary> {
-        return promise(NSURLRequest(URL:NSURL(string:url + PMKDictionaryToURLQueryString(query))))
+
+    public class func GET(url:String, query:[String:String]) -> Promise<NSData> {
+        return promise(OMGHTTPURLRQ.GET(url, query))
     }
-    public class func GET(url:String, query:Dictionary<String, String>) -> Promise<NSArray> {
-        return promise(NSURLRequest(URL:NSURL(string:url + PMKDictionaryToURLQueryString(query))))
+    public class func GET(url:String, query:[String:String]) -> Promise<String> {
+        return promise(OMGHTTPURLRQ.GET(url, query))
     }
-    
+    public class func GET(url:String, query:[String:String]) -> Promise<UIImage> {
+        return promise(OMGHTTPURLRQ.GET(url, query))
+    }
+    public class func GET(url:String, query:[String:String]) -> Promise<NSDictionary> {
+        return promise(OMGHTTPURLRQ.GET(url, query))
+    }
+    public class func GET(url:String, query:[String:String]) -> Promise<NSArray> {
+        return promise(OMGHTTPURLRQ.GET(url, query))
+    }
+
+
+    public class func POST(url:String, formData:[String:String]) -> Promise<NSData> {
+        return promise(OMGHTTPURLRQ.POST(url, JSON: formData))
+    }
+    public class func POST(url:String, formData:[String:String]) -> Promise<String> {
+        return promise(OMGHTTPURLRQ.POST(url, formData))
+    }
+    public class func POST(url:String, formData:[String:String]) -> Promise<UIImage> {
+        return promise(OMGHTTPURLRQ.POST(url, formData))
+    }
+    public class func POST(url:String, formData:[String:String]) -> Promise<NSArray> {
+        return promise(OMGHTTPURLRQ.POST(url, formData))
+    }
+    public class func POST(url:String, formData:[String:String]) -> Promise<NSDictionary> {
+        return promise(OMGHTTPURLRQ.POST(url, formData))
+    }
+
+
+    public class func POST(url:String, JSON json:[String:String]) -> Promise<NSData> {
+        return promise(OMGHTTPURLRQ.POST(url, JSON: json))
+    }
+    public class func POST(url:String, JSON json:[String:String]) -> Promise<String> {
+        return promise(OMGHTTPURLRQ.POST(url, JSON: json))
+    }
+    public class func POST(url:String, JSON json:[String:String]) -> Promise<UIImage> {
+        return promise(OMGHTTPURLRQ.POST(url, JSON: json))
+    }
+    public class func POST(url:String, JSON json:[String:String]) -> Promise<NSArray> {
+        return promise(OMGHTTPURLRQ.POST(url, JSON: json))
+    }
+    public class func POST(url:String, JSON json:[String:String]) -> Promise<NSDictionary> {
+        return promise(OMGHTTPURLRQ.POST(url, JSON: json))
+    }
+
+
+    public class func POST(url:String, multipartFormData: OMGMultipartFormData) -> Promise<NSData> {
+        return promise(OMGHTTPURLRQ.POST(url, multipartFormData))
+    }
+    public class func POST(url:String, multipartFormData: OMGMultipartFormData) -> Promise<String> {
+        return promise(OMGHTTPURLRQ.POST(url, multipartFormData))
+    }
+    public class func POST(url:String, multipartFormData: OMGMultipartFormData) -> Promise<UIImage> {
+        return promise(OMGHTTPURLRQ.POST(url, multipartFormData))
+    }
+    public class func POST(url:String, multipartFormData: OMGMultipartFormData) -> Promise<NSArray> {
+        return promise(OMGHTTPURLRQ.POST(url, multipartFormData))
+    }
+    public class func POST(url:String, multipartFormData: OMGMultipartFormData) -> Promise<NSDictionary> {
+        return promise(OMGHTTPURLRQ.POST(url, multipartFormData))
+    }
+
+
     public class func promise(rq:NSURLRequest) -> Promise<NSData> {
-        return fetch(rq) { (fulfiller, _, data) in
-            fulfiller(data)
+        return fetch(rq) { (fulfill, _, data, _) in
+            fulfill(data)
         }
     }
 
-    public class func promise(rq:NSURLRequest) -> Promise<String> {
-        return fetch(rq) { (fulfiller, rejecter, data) in
-            let str:String? = NSString(data: data, encoding: NSUTF8StringEncoding)
+    public class func promise(rq: NSURLRequest) -> Promise<String> {
+        return fetch(rq) { (fulfiller, rejecter, data, rsp) in
+            let str = NSString(data: data, encoding:rsp.stringEncoding)
             if str != nil {
                 fulfiller(str!)
             } else {
-                let info = [NSLocalizedDescriptionKey: "The server returned repsonse was not textual"]
+                let info = [NSLocalizedDescriptionKey: "The server response was not textual"]
                 rejecter(NSError(domain:NSURLErrorDomain, code: NSURLErrorBadServerResponse, userInfo:info))
             }
         }
     }
 
-    //TODO DRY these out
-    //NOTE I did DRY them out, but then something went wrong with
-    // generics and the cast stopped working in the generic function
-    //TODO Rather than AnyObject have some kind of something so
-    // that only JSON object types work, also ideally I should be
-    // about to specify eg String[] or [String:Array] etc.
-
-    public class func promise(request:NSURLRequest) -> Promise<NSDictionary> {
-        return fetch(request) { (fulfiller, rejecter, data) in
-            var error:NSError?
-            let json:AnyObject? = NSJSONSerialization.JSONObjectWithData(data, options:nil, error:&error)
-
-            if error != nil {
-                rejecter(error!)
-            } else if let cast = json as? Dictionary<String, String> {
-                println(json)
-                println(cast)
-                fulfiller(cast)
-            } else {
-                var info:Dictionary = [:]
-                info[NSLocalizedDescriptionKey] = "The server returned JSON in an unexpected arrangement"
-                if let jo:AnyObject = json { info[PMKJSONErrorJSONObjectKey] = jo }
-                rejecter(NSError(domain:PMKErrorDomain, code:PMKJSONError, userInfo:info))
-            }
-
-        }
+    public class func promise(request: NSURLRequest) -> Promise<NSDictionary> {
+        return fetchJSON(request)
     }
 
-    public class func promise(request:NSURLRequest) -> Promise<NSArray> {
-        return fetch(request) { (fulfiller, rejecter, data) in
-            var error:NSError?
-            let json:AnyObject? = NSJSONSerialization.JSONObjectWithData(data, options:nil, error:&error)
-
-            if error != nil {
-                rejecter(error!)
-            } else if let cast = json as? NSArray {
-                fulfiller(cast)
-            } else {
-                var info:Dictionary = [:]
-                info[NSLocalizedDescriptionKey] = "The server returned JSON in an unexpected arrangement"
-                if let jo:AnyObject = json { info[PMKJSONErrorJSONObjectKey] = jo }
-                rejecter(NSError(domain:PMKErrorDomain, code:PMKJSONError, userInfo:info))
-            }
-
-        }
+    public class func promise(request: NSURLRequest) -> Promise<NSArray> {
+        return fetchJSON(request)
     }
 
-    public class func promise(rq:NSURLRequest) -> Promise<UIImage> {
-        return fetch(rq) { (fulfiller, rejecter, data) in
-            var img:UIImage? = UIImage(data:data)
+    public class func promise(rq: NSURLRequest) -> Promise<UIImage> {
+        return fetch(rq) { (fulfiller, rejecter, data, _) in
+            assert(!NSThread.isMainThread())
+
+            var img = UIImage(data: data) as UIImage!
             if img != nil {
-                img = UIImage(CGImage:img!.CGImage, scale:img!.scale, orientation:img!.imageOrientation)
+                img = UIImage(CGImage:img.CGImage, scale:img.scale, orientation:img.imageOrientation)
                 if img != nil {
-                    return fulfiller(img!)
+                    return fulfiller(img)
                 }
             }
 
             let info = [NSLocalizedDescriptionKey: "The server returned invalid image data"]
             rejecter(NSError(domain:NSURLErrorDomain, code:NSURLErrorBadServerResponse, userInfo:info))
-
-            assert(!NSThread.isMainThread())
         }
     }
 }

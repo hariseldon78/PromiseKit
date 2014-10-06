@@ -1,5 +1,7 @@
 import UIKit
-import MessageUI
+import MessageUI.MFMailComposeViewController
+import Social.SLComposeViewController
+
 
 class MFMailComposeViewControllerProxy: NSObject, MFMailComposeViewControllerDelegate, UINavigationControllerDelegate {
 
@@ -38,7 +40,7 @@ class Resolver<T> {
     }
 }
 
-var key = "PMKSomeString"
+private var key = "PMKSomeString"
 
 extension UIViewController {
     public func fulfill<T>(value:T) {
@@ -78,7 +80,17 @@ extension UIViewController {
         vc.delegate = delegate
         PMKRetain(delegate)
         return promiseViewController(vc as UIViewController, animated: animated, completion: completion).finally {
-            PMKRelease(vc.delegate)
+            PMKRelease(delegate)
+        }
+    }
+
+    public func promiseViewController(vc: SLComposeViewController, animated: Bool = false, completion:(Void)->() = {}) -> Promise<SLComposeViewControllerResult> {
+        return Promise { (fulfill, reject) in
+            vc.completionHandler = { (result: SLComposeViewControllerResult) in
+                fulfill(result)
+                self.dismissViewControllerAnimated(animated, completion: nil)
+            }
+            self.presentViewController(vc, animated: animated, completion: completion)
         }
     }
 }
