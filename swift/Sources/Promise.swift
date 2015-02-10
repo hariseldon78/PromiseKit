@@ -101,7 +101,7 @@ public class Promise<T> {
     }
 
     public init(value: T) {
-        _state = .Fulfilled(value)
+        _state = .Fulfilled(value as! AnyObject)
     }
 
     public init(error: NSError) {
@@ -139,12 +139,12 @@ public class Promise<T> {
                     reject(error)
                 case .Fulfilled(let value):
                     dispatch_async(q) {
-                        let promise = body(value)
+                        let promise = body(value as! T)
                         switch promise.state {
                         case .Rejected(let error):
                             reject(error)
                         case .Fulfilled(let value):
-                            fulfill(value)
+                            fulfill(value as! U)
                         case .Pending(let handlers):
                             dispatch_barrier_sync(promise.barrier) {
                                 handlers.append {
@@ -152,7 +152,7 @@ public class Promise<T> {
                                     case .Rejected(let error):
                                         reject(error)
                                     case .Fulfilled(let value):
-                                        fulfill(value)
+                                        fulfill(value as! U)
                                     case .Pending:
                                         abort()
                                     }
@@ -187,7 +187,7 @@ public class Promise<T> {
                         fulfill(body(error))
                     }
                 case .Fulfilled(let value):
-                    fulfill(value)
+                    fulfill(value as! T)
                 case .Pending:
                     abort()
                 }
@@ -233,14 +233,14 @@ public class Promise<T> {
             let handler = { ()->() in
                 switch self.state {
                 case .Fulfilled(let value):
-                    fulfill(value)
+                    fulfill(value as! T)
                 case .Rejected(let error):
                     dispatch_async(q) {
                         error.consumed = true
                         let promise = body(error)
                         switch promise.state {
                         case .Fulfilled(let value):
-                            fulfill(value)
+                            fulfill(value as! T)
                         case .Rejected(let error):
                             dispatch_async(q) { reject(error) }
                         case .Pending(let handlers):
@@ -250,7 +250,7 @@ public class Promise<T> {
                                     case .Rejected(let error):
                                         reject(error)
                                     case .Fulfilled(let value):
-                                        fulfill(value)
+                                        fulfill(value as! T)
                                     case .Pending:
                                         abort()
                                     }
@@ -284,7 +284,7 @@ public class Promise<T> {
                 case .Fulfilled(let value):
                     dispatch_async(q) {
                         body()
-                        fulfill(value)
+                        fulfill(value as! T)
                     }
                 case .Rejected(let error):
                     dispatch_async(q) {
@@ -395,12 +395,12 @@ private class Handlers: SequenceType {
 
 extension Promise: DebugPrintable {
     public var debugDescription: String {
-        var state: State<T>?
+        let state: State
         dispatch_sync(barrier) {
             state = self._state
         }
 
-        switch state! {
+        switch state {
         case .Pending(let handlers):
             var count: Int?
             dispatch_sync(barrier) {
