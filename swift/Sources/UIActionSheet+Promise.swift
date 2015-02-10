@@ -1,15 +1,15 @@
 import UIKit
 
-class UIActionSheetProxy: NSObject, UIActionSheetDelegate {
+private class UIActionSheetProxy: NSObject, UIActionSheetDelegate {
     let fulfiller: (Int) -> Void
 
-    init(fulfiller: (Int) -> Void) {
+    init(_ fulfiller: (Int) -> Void) {
         self.fulfiller = fulfiller
         super.init()
         PMKRetain(self)
     }
 
-    func actionSheet(actionSheet: UIActionSheet!, didDismissWithButtonIndex buttonIndex: Int) {
+    func actionSheet(actionSheet: UIActionSheet, didDismissWithButtonIndex buttonIndex: Int) {
         fulfiller(buttonIndex)
         PMKRelease(self)
     }

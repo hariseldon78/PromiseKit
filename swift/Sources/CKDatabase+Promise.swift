@@ -1,7 +1,7 @@
 import CloudKit.CKDatabase
 
-private func proxy<T>(fulfill: (T)->(), reject: (NSError)->())(value: T!, error: NSError!) {
-    if value != nil { fulfill(value!) } else { reject(error!) }
+private func proxy<T>(d: (fulfill: (T)->Void, reject: (NSError)->Void))(value: T!, error: NSError!) {
+    if value != nil { d.fulfill(value!) } else { d.reject(error!) }
 }
 
 extension CKDatabase {
@@ -26,7 +26,7 @@ extension CKDatabase {
     public func fetchAllRecordZones() -> Promise<[CKRecordZone]> {
         return Promise { d in
             self.fetchAllRecordZonesWithCompletionHandler({
-                proxy(d)(value: $0 as [CKRecordZone], error: $1)
+                proxy(d)(value: $0 as! [CKRecordZone], error: $1)
             })
         }
     }
@@ -34,7 +34,7 @@ extension CKDatabase {
     public func fetchAllSubscriptions() -> Promise<[CKSubscription]> {
         return Promise { d in
             self.fetchAllSubscriptionsWithCompletionHandler({
-                proxy(d)(value: $0 as [CKSubscription], error: $1)
+                proxy(d)(value: $0 as! [CKSubscription], error: $1)
             })
         }
     }
@@ -78,7 +78,7 @@ extension CKDatabase {
     public func performQuery(query: CKQuery, inZoneWithID zoneID: CKRecordZoneID? = nil) -> Promise<[CKRecord]> {
         return Promise { d in
             self.performQuery(query, inZoneWithID: zoneID) {
-                proxy(d)(value: $0 as [CKRecord], error: $1)
+                proxy(d)(value: $0 as! [CKRecord], error: $1)
             }
         }
     }
@@ -91,7 +91,7 @@ extension CKDatabase {
                 } else if records.isEmpty {
                     d.fulfill(nil)
                 } else {
-                    d.fulfill((records as [CKRecord])[0])
+                    d.fulfill((records as! [CKRecord])[0])
                 }
             }
         }

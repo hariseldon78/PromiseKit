@@ -1,15 +1,15 @@
 import UIKit
 
-class UIAlertViewProxy: NSObject, UIAlertViewDelegate {
+private class UIAlertViewProxy: NSObject, UIAlertViewDelegate {
     let fulfiller: (Int) -> Void
 
-    init(fulfiller: (Int) -> Void) {
+    init(_ fulfiller: (Int) -> Void) {
         self.fulfiller = fulfiller
         super.init()
         PMKRetain(self)
     }
 
-    func alertView(alertView: UIAlertView!, didDismissWithButtonIndex buttonIndex: Int) {
+    func alertView(alertView: UIAlertView, didDismissWithButtonIndex buttonIndex: Int) {
         fulfiller(buttonIndex)
         PMKRelease(self)
     }

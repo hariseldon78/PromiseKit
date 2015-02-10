@@ -44,10 +44,10 @@ public func when<T>(promises: Promise<T>...) -> Promise<[T]> {
 
 public func when<U,V>(promise1: Promise<U>, promise2: Promise<V>) -> Promise<(U,V)> {
     let (promise, fulfiller, rejecter) = Promise<(U,V)>.defer()
-    var first:Any?
+    var first: Any?
     promise1.then{ u->() in
         if let seal = first {
-            let fulfillment = (u, seal as V)
+            let fulfillment = (u, seal as! V)
             fulfiller(fulfillment)
         } else {
             first = u
@@ -55,7 +55,7 @@ public func when<U,V>(promise1: Promise<U>, promise2: Promise<V>) -> Promise<(U,
     }
     promise2.then{ v->() in
         if let seal = first {
-            let fulfillment = (seal as U, v)
+            let fulfillment = (seal as! U, v)
             fulfiller(fulfillment)
         } else {
             first = v

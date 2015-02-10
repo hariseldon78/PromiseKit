@@ -17,7 +17,7 @@ extension NSURLResponse {
 
 private func fetch<T>(var request: NSURLRequest, body: ((T) -> Void, (NSError) -> Void, NSData, NSURLResponse) -> Void) -> Promise<T> {
     if request.valueForHTTPHeaderField("User-Agent") == nil {
-        let rq = request.mutableCopy() as NSMutableURLRequest
+        let rq = request.mutableCopy() as! NSMutableURLRequest
         rq.setValue(OMGUserAgent(), forHTTPHeaderField:"User-Agent")
         request = rq
     }
@@ -31,9 +31,9 @@ private func fetch<T>(var request: NSURLRequest, body: ((T) -> Void, (NSError) -
             //TODO in the event of a non 2xx rsp, try to parse JSON out of the response anyway
 
             func rejecter(error: NSError) {
-                let info = NSMutableDictionary(dictionary: error.userInfo ?? [:])
+                var info = error.userInfo ?? [:]
                 info[NSURLErrorFailingURLErrorKey] = request.URL
-                info[NSURLErrorFailingURLStringErrorKey] = request.URL.absoluteString
+                info[NSURLErrorFailingURLStringErrorKey] = request.URL?.absoluteString
                 if data != nil {
                     info[PMKURLErrorFailingDataKey] = data!
                     if let str = NSString(data: data, encoding: rsp.stringEncoding) {
@@ -41,7 +41,7 @@ private func fetch<T>(var request: NSURLRequest, body: ((T) -> Void, (NSError) -
                     }
                 }
                 if rsp != nil { info[PMKURLErrorFailingURLResponseKey] = rsp! }
-                rejunker(NSError(domain:error.domain, code:error.code, userInfo:info))
+                rejunker(NSError(domain: error.domain, code: error.code, userInfo: info))
             }
 
             if err != nil {
@@ -77,7 +77,7 @@ private func NSJSONFromDataT<T>(data: NSData) -> Promise<T> {
     } else if let cast = json as? T {
         return Promise(value: cast)
     } else {
-        var info = NSMutableDictionary()
+        var info = [NSObject:AnyObject]()
         info[NSLocalizedDescriptionKey] = "The server returned JSON in an unexpected arrangement"
         if let jo:AnyObject = json { info[PMKJSONErrorJSONObjectKey] = jo }
         let error = NSError(domain:PMKErrorDomain, code:PMKJSONError, userInfo:info)
@@ -197,9 +197,8 @@ extension NSURLConnection {
 
     public class func promise(rq: NSURLRequest) -> Promise<String> {
         return fetch(rq) { (fulfiller, rejecter, data, rsp) in
-            let str = NSString(data: data, encoding:rsp.stringEncoding)
-            if str != nil {
-                fulfiller(str!)
+            if let str = NSString(data: data, encoding:rsp.stringEncoding) {
+                fulfiller(str as! String)
             } else {
                 let info = [NSLocalizedDescriptionKey: "The server response was not textual"]
                 rejecter(NSError(domain:NSURLErrorDomain, code: NSURLErrorBadServerResponse, userInfo:info))

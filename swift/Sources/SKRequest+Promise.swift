@@ -5,7 +5,7 @@ private class SKRequestProxy: NSObject, SKRequestDelegate {
     let fulfiller:(SKRequest) -> ()
     let rejecter:(NSError) -> ()
 
-    init(fulfiller:(SKRequest) -> (), rejecter:(NSError) -> ()) {
+    init(_ fulfiller: (SKRequest) -> (), _ rejecter: (NSError) -> ()) {
         self.fulfiller = fulfiller
         self.rejecter = rejecter
         super.init()
