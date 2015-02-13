@@ -4,7 +4,7 @@ import Foundation
 
 private enum State {
     case Pending(Handlers)
-    case Fulfilled(AnyObject)
+    case Fulfilled(Any)
     case Rejected(Error)
 }
 
@@ -15,7 +15,7 @@ public class Promise<T> {
     private var _state: State
 
     private var state: State {
-        let result: State
+        var result: State!
         dispatch_sync(barrier) { result = self._state }
         return result
     }
@@ -83,14 +83,17 @@ public class Promise<T> {
             for handler in handlers { handler() }
         }
 
-        body({ (t:T) -> Void in resolver(.Fulfilled(t)) }, { (error: NSError)->() in
-            if let pmkerror = error as? Error {
-                pmkerror.consumed = false
-                resolver(.Rejected(pmkerror))
-            } else {
-                resolver(.Rejected(Error(domain: error.domain, code: error.code, userInfo: error.userInfo)))
-            }
-        })
+		let __fulfiller={ (t:T) -> Void in resolver(.Fulfilled(t)) }
+		let __rejecter={ (error: NSError)->Void in
+			if let pmkerror = error as? Error {
+				pmkerror.consumed = false
+				resolver(.Rejected(pmkerror))
+			} else {
+				resolver(.Rejected(Error(domain: error.domain, code: error.code, userInfo: error.userInfo)))
+			}
+		}
+		body(fulfill: __fulfiller , reject: __rejecter)
+
     }
 
     public class func defer() -> (promise:Promise, fulfill:(T) -> Void, reject:(NSError) -> Void) {
@@ -115,7 +118,8 @@ public class Promise<T> {
                 case .Rejected(let error):
                     reject(error)
                 case .Fulfilled(let value):
-                    dispatch_async(q) { fulfill(body(value)) }
+					let __block={()->Void in fulfill(body(value as! T)) }
+                    dispatch_async(q,__block)
                 case .Pending:
                     abort()
                 }
@@ -395,12 +399,12 @@ private class Handlers: SequenceType {
 
 extension Promise: DebugPrintable {
     public var debugDescription: String {
-        let state: State
+        var state: State!
         dispatch_sync(barrier) {
             state = self._state
         }
 
-        switch state {
+        switch state! {
         case .Pending(let handlers):
             var count: Int?
             dispatch_sync(barrier) {
