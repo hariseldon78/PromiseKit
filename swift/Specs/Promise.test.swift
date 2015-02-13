@@ -194,7 +194,7 @@ class TestPromise: XCTestCase {
         let e1 = expectation()
 
         let p1 = Promise<Int>{ _, reject in
-            reject(NSError())
+            reject(dammy)
         }
         let p2 = p1.then{ (number: Int)->Void in
             let a = "int is \(number)"
@@ -211,6 +211,58 @@ class TestPromise: XCTestCase {
         let q = dispatch_get_global_queue(0, 0)
         let catch = p3.catch as (dispatch_queue_t, (err:NSError)->())->()
         catch(q) { err in
+            e1.fulfill()
+        }
+
+        waitForExpectationsWithTimeout(1, handler: nil)
+    }
+
+    func testZalgo() {
+        var resolved = false
+        Promise(value: 1).thenUnleashZalgo{ x in
+            resolved = true
+        }
+        XCTAssertTrue(resolved)
+    }
+
+    func testWhenAnyObject() {
+        let e1 = expectation()
+        let p1 = Promise(value: 1 as AnyObject)
+        let p2 = Promise(value: 2 as AnyObject)
+        let p3 = Promise(value: 3 as AnyObject)
+        let p4 = Promise(value: 4 as AnyObject)
+
+        when(p1, p2, p3, p4).then { (x: [AnyObject])->() in
+            XCTAssertEqual(x[0] as Int, 1)
+            XCTAssertEqual(x[1] as Int, 2)
+            XCTAssertEqual(x[2] as Int, 3)
+            XCTAssertEqual(x[3] as Int, 4)
+            XCTAssertEqual(x.count, 4)
+            e1.fulfill()
+        }
+        waitForExpectationsWithTimeout(1, handler: nil)
+    }
+
+    func testWhen2() {
+        let e1 = expectation()
+        let p1 = Promise(value: 1)
+        let p2 = Promise(value: "abc")
+        when(p1, p2).then{ (x: Int, y: String)->() in
+            XCTAssertEqual(x, 1)
+            XCTAssertEqual(y, "abc")
+            e1.fulfill()
+        }
+        waitForExpectationsWithTimeout(1, handler: nil)
+    }
+
+    func testWhenVoid() {
+        let e1 = expectation()
+        let p1 = Promise(value: 1).then{ x->Void in }
+        let p2 = Promise(value: 2).then{ x->Void in }
+        let p3 = Promise(value: 3).then{ x->Void in }
+        let p4 = Promise(value: 4).then{ x->Void in }
+
+        when([p1, p2, p3, p4]).then{
             e1.fulfill()
         }
 
