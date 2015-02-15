@@ -104,7 +104,7 @@ public class Promise<T> {
     }
 
     public init(value: T) {
-        _state = .Fulfilled(value as! AnyObject)
+        _state = .Fulfilled(value)
     }
 
     public init(error: NSError) {
