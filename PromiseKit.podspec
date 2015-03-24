@@ -1,6 +1,11 @@
+
 Pod::Spec.new do |s|
   s.name = "PromiseKit"
-  s.version = "1.2.2"
+
+  `xcodebuild -project PromiseKit.xcodeproj -showBuildSettings` =~ /CURRENT_PROJECT_VERSION = ((\d\.)+\d)/
+  abort if $1.nil?
+  s.version = $1
+
   s.source = { :git => "https://github.com/mxcl/#{s.name}.git", :tag => s.version }
   s.license = 'MIT'
   s.summary = 'A delightful Promises implementation for iOS and OS X.'
@@ -78,12 +83,13 @@ Pod::Spec.new do |s|
     ss.frameworks = 'Foundation'
   end
 
-  %w{Pause Until When}.each do |name|
+  %w{Pause Until When Join Hang Zalgo}.each do |name|
     s.subspec(name) do |ss|
       ss.source_files = "objc/PMKPromise+#{name}.m", "objc/PromiseKit/Promise+#{name}.h"
       ss.xcconfig = { "GCC_PREPROCESSOR_DEFINITIONS" => "$(inherited) PMK_#{name.upcase}=1" }
       ss.preserve_paths = 'objc/PromiseKit'
       ss.dependency 'PromiseKit/When' if name == 'Until'
+      ss.dependency 'PromiseKit/Until' if name == 'Join'
       ss.dependency 'PromiseKit/Promise'
     end
   end
@@ -158,6 +164,8 @@ Pod::Spec.new do |s|
     ss.dependency 'PromiseKit/When'
     ss.dependency 'PromiseKit/Until'
     ss.dependency 'PromiseKit/Pause'
+    ss.dependency 'PromiseKit/Join'
+    ss.dependency 'PromiseKit/Hang'
 
     ss.dependency 'PromiseKit/Accounts'
     ss.dependency 'PromiseKit/AVFoundation'
@@ -172,8 +180,12 @@ Pod::Spec.new do |s|
   end
 
   s.subspec 'Swift' do |ss|
-    ss.source_files = 'swift/Sources/**/*.{swift,h,m}'
-    ss.framework = 'AssetsLibrary'
+    ss.ios.framework = 'AssetsLibrary'
+    ss.dependency 'OMGHTTPURLRQ'
+    ss.ios.deployment_target = 8.0
+    ss.osx.deployment_target = 10.9
+    ss.ios.source_files = 'Swift Sources/*.{swift,h,m}'
+    ss.osx.source_files = Dir["Swift Sources/*.swift"] - ["Swift Sources/AVAudioSession.swift"] - Dir["Swift Sources/UI*"]
   end
 
 #### deprecated

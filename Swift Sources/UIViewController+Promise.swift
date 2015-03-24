@@ -49,7 +49,7 @@ extension UIViewController {
     }
 
     public func reject(error:NSError) {
-        let resolver = objc_getAssociatedObject(self, &key) as! Resolver<Any>
+        let resolver = objc_getAssociatedObject(self, &key) as! Resolver<Any>;
         resolver.rejecter(error)
     }
 
@@ -73,18 +73,6 @@ extension UIViewController {
     public func promiseViewController(vc: MFMailComposeViewController, animated: Bool = false, completion:(Void)->() = {}) -> Promise<Int> {
         vc.delegate = MFMailComposeViewControllerProxy()
         return promiseViewController(vc as UIViewController, animated: animated, completion: completion)
-    }
-
-    private func imagePicker<T>(vc: UIImagePickerController, _ animated: Bool, _ completion:()->(), process: (NSDictionary)->T) -> Promise<T?> {
-        let delegate = UIImagePickerControllerProxy()
-        vc.delegate = delegate
-        PMKRetain(delegate)
-        return promiseViewController(vc as UIViewController, animated: animated, completion: completion).then{
-            (dict: NSDictionary?) -> T? in
-            return dict == nil ? nil : process(dict!)
-        }.finally {
-            PMKRelease(delegate)
-        }
     }
 
     public func promiseViewController(vc: UIImagePickerController, animated: Bool = false, completion:()->() = {}) -> Promise<UIImage?> {

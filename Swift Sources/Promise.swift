@@ -15,9 +15,9 @@ public class Promise<T> {
     private var _state: State
 
     private var state: State {
-        var result: State!
+        var result: State?
         dispatch_sync(barrier) { result = self._state }
-        return result
+        return result!
     }
 
     public var rejected: Bool {
@@ -65,7 +65,7 @@ public class Promise<T> {
         }
     }
 
-    public init(_ body: (fulfill: (T) -> Void, reject: (NSError) -> Void) -> Void) {
+    public init(_ body:(fulfill: (T) -> Void, reject: (NSError) -> Void) -> Void) {
         _state = .Pending(Handlers())
 
         let resolver = { (newstate: State) -> Void in
@@ -75,25 +75,24 @@ public class Promise<T> {
                 case .Pending(let Ω):
                     self._state = newstate
                     handlers = Ω.bodies
-                    Ω.bodies.removeAll(keepCapacity: false)
                 default:
-                    noop()
+                    break
                 }
             }
             for handler in handlers { handler() }
         }
 
-		let __fulfiller={ (t:T) -> Void in resolver(.Fulfilled(t)) }
-		let __rejecter={ (error: NSError)->Void in
-			if let pmkerror = error as? Error {
-				pmkerror.consumed = false
-				resolver(.Rejected(pmkerror))
-			} else {
-				resolver(.Rejected(Error(domain: error.domain, code: error.code, userInfo: error.userInfo)))
-			}
-		}
-		body(fulfill: __fulfiller , reject: __rejecter)
-
+        body(fulfill: { value->() in
+            resolver(.Fulfilled(value))
+            return
+        }, reject: { error in
+            if let pmkerror = error as? Error {
+                pmkerror.consumed = false
+                resolver(.Rejected(pmkerror))
+            } else {
+                resolver(.Rejected(Error(domain: error.domain, code: error.code, userInfo: error.userInfo)))
+            }
+        })
     }
 
     public class func defer() -> (promise:Promise, fulfill:(T) -> Void, reject:(NSError) -> Void) {
@@ -111,15 +110,14 @@ public class Promise<T> {
         _state = .Rejected(Error(domain: error.domain, code: error.code, userInfo: error.userInfo))
     }
 
-    public func then<U>(onQueue q: dispatch_queue_t = dispatch_get_main_queue(), body: (T) -> U) -> Promise<U> {
+    public func then<U>(onQueue q:dispatch_queue_t = dispatch_get_main_queue(), body:(T) -> U) -> Promise<U> {
         return Promise<U>{ (fulfill, reject) in
             let handler = { ()->() in
                 switch self.state {
                 case .Rejected(let error):
                     reject(error)
                 case .Fulfilled(let value):
-					let __block={()->Void in fulfill(body(value as! T)) }
-                    dispatch_async(q,__block)
+                    dispatch_async(q) { fulfill(body(value as! T)) }
                 case .Pending:
                     abort()
                 }
@@ -181,6 +179,14 @@ public class Promise<T> {
         }
     }
 
+    public func thenInBackground<U>(body:(T) -> U) -> Promise<U> {
+        return then(onQueue: dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), body: body)
+    }
+    
+    public func thenInBackground<U>(body:(T) -> Promise<U>) -> Promise<U> {
+        return then(onQueue: dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), body: body)
+    }
+
     public func catch(onQueue q:dispatch_queue_t = dispatch_get_main_queue(), body:(NSError) -> T) -> Promise<T> {
         return Promise<T>{ (fulfill, _) in
             let handler = { ()->() in
@@ -216,7 +222,7 @@ public class Promise<T> {
                     body(error)
                 }
             case .Fulfilled:
-                noop()
+                break
             case .Pending:
                 abort()
             }
@@ -315,15 +321,14 @@ public class Promise<T> {
 
      Please note, there are good reasons that `then` does not call `body`
      immediately if the promise is already fulfilled. If you don’t understand
-     the implications of unleashing zalgo, you should not use this function!
+     the implications of unleashing zalgo, you should not under any
+     cirumstances use this function!
     */
-    public func thenUnleashZalgo(body: (T)->Void) -> Void {
+    public func thenUnleashZalgo(body:(T)->Void) -> Void {
         if let obj = value {
             body(obj)
         } else {
-            then { t->() in
-                body(t)
-            }
+            then(body: body)
         }
     }
 
@@ -399,7 +404,7 @@ private class Handlers: SequenceType {
 
 extension Promise: DebugPrintable {
     public var debugDescription: String {
-        var state: State!
+        var state: State?
         dispatch_sync(barrier) {
             state = self._state
         }

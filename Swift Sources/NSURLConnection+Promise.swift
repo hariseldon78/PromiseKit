@@ -1,5 +1,5 @@
 import Foundation
-import UIKit.UIImage
+import OMGHTTPURLRQ
 
 
 extension NSURLResponse {
@@ -31,23 +31,24 @@ private func fetch<T>(var request: NSURLRequest, body: ((T) -> Void, (NSError) -
             //TODO in the event of a non 2xx rsp, try to parse JSON out of the response anyway
 
             func rejecter(error: NSError) {
-                var info = error.userInfo ?? [:]
+                let info = NSMutableDictionary(dictionary: error.userInfo ?? [:])
                 info[NSURLErrorFailingURLErrorKey] = request.URL
-                info[NSURLErrorFailingURLStringErrorKey] = request.URL?.absoluteString
+                info[NSURLErrorFailingURLStringErrorKey] = request.URL!.absoluteString
                 if data != nil {
                     info[PMKURLErrorFailingDataKey] = data!
-                    if let str = NSString(data: data, encoding: rsp.stringEncoding) {
+                    let encoding = rsp?.stringEncoding ?? NSUTF8StringEncoding
+                    if let str = NSString(data: data, encoding: encoding) {
                         info[PMKURLErrorFailingStringKey] = str
                     }
                 }
                 if rsp != nil { info[PMKURLErrorFailingURLResponseKey] = rsp! }
-                rejunker(NSError(domain: error.domain, code: error.code, userInfo: info))
+                rejunker(NSError(domain:error.domain, code:error.code, userInfo:info as [NSObject : AnyObject]))
             }
 
             if err != nil {
                 rejecter(err)
             } else {
-                body(fulfiller, rejecter, data!, rsp)
+                body(fulfiller, rejecter, data, rsp)
             }
         }
     }
@@ -77,10 +78,10 @@ private func NSJSONFromDataT<T>(data: NSData) -> Promise<T> {
     } else if let cast = json as? T {
         return Promise(value: cast)
     } else {
-        var info = [NSObject:AnyObject]()
+        var info = NSMutableDictionary()
         info[NSLocalizedDescriptionKey] = "The server returned JSON in an unexpected arrangement"
         if let jo:AnyObject = json { info[PMKJSONErrorJSONObjectKey] = jo }
-        let error = NSError(domain:PMKErrorDomain, code:PMKJSONError, userInfo:info)
+        let error = NSError(domain:PMKErrorDomain, code:PMKJSONError, userInfo:info as [NSObject : AnyObject])
         return Promise(error: error)
     }
 }
@@ -108,9 +109,6 @@ extension NSURLConnection {
     public class func GET(url:String) -> Promise<String> {
         return promise(NSURLRequest(URL:NSURL(string:url)!))
     }
-    public class func GET(url:String) -> Promise<UIImage> {
-        return promise(NSURLRequest(URL:NSURL(string:url)!))
-    }
     public class func GET(url:String) -> Promise<NSArray> {
         return promise(NSURLRequest(URL:NSURL(string:url)!))
     }
@@ -122,9 +120,6 @@ extension NSURLConnection {
         return promise(OMGHTTPURLRQ.GET(url, query))
     }
     public class func GET(url:String, query:[String:String]) -> Promise<String> {
-        return promise(OMGHTTPURLRQ.GET(url, query))
-    }
-    public class func GET(url:String, query:[String:String]) -> Promise<UIImage> {
         return promise(OMGHTTPURLRQ.GET(url, query))
     }
     public class func GET(url:String, query:[String:String]) -> Promise<NSDictionary> {
@@ -141,9 +136,6 @@ extension NSURLConnection {
     public class func POST(url:String, formData:[String:String]) -> Promise<String> {
         return promise(OMGHTTPURLRQ.POST(url, formData))
     }
-    public class func POST(url:String, formData:[String:String]) -> Promise<UIImage> {
-        return promise(OMGHTTPURLRQ.POST(url, formData))
-    }
     public class func POST(url:String, formData:[String:String]) -> Promise<NSArray> {
         return promise(OMGHTTPURLRQ.POST(url, formData))
     }
@@ -156,9 +148,6 @@ extension NSURLConnection {
         return promise(OMGHTTPURLRQ.POST(url, JSON: json))
     }
     public class func POST(url:String, JSON json:[String:String]) -> Promise<String> {
-        return promise(OMGHTTPURLRQ.POST(url, JSON: json))
-    }
-    public class func POST(url:String, JSON json:[String:String]) -> Promise<UIImage> {
         return promise(OMGHTTPURLRQ.POST(url, JSON: json))
     }
     public class func POST(url:String, JSON json:[String:String]) -> Promise<NSArray> {
@@ -178,9 +167,6 @@ extension NSURLConnection {
     public class func POST(url:String, multipartFormData: OMGMultipartFormData) -> Promise<String> {
         return promise(OMGHTTPURLRQ.POST(url, multipartFormData))
     }
-    public class func POST(url:String, multipartFormData: OMGMultipartFormData) -> Promise<UIImage> {
-        return promise(OMGHTTPURLRQ.POST(url, multipartFormData))
-    }
     public class func POST(url:String, multipartFormData: OMGMultipartFormData) -> Promise<NSArray> {
         return promise(OMGHTTPURLRQ.POST(url, multipartFormData))
     }
@@ -197,8 +183,9 @@ extension NSURLConnection {
 
     public class func promise(rq: NSURLRequest) -> Promise<String> {
         return fetch(rq) { (fulfiller, rejecter, data, rsp) in
-            if let str = NSString(data: data, encoding:rsp.stringEncoding) {
-                fulfiller(str as! String)
+            let str = NSString(data: data, encoding:rsp.stringEncoding)
+            if str != nil {
+                fulfiller(str! as String)
             } else {
                 let info = [NSLocalizedDescriptionKey: "The server response was not textual"]
                 rejecter(NSError(domain:NSURLErrorDomain, code: NSURLErrorBadServerResponse, userInfo:info))
@@ -212,6 +199,33 @@ extension NSURLConnection {
 
     public class func promise(request: NSURLRequest) -> Promise<NSArray> {
         return fetchJSON(request)
+    }
+}
+
+
+#if os(iOS)
+import UIKit.UIImage
+
+extension NSURLConnection {
+
+    public class func GET(url:String) -> Promise<UIImage> {
+        return promise(NSURLRequest(URL:NSURL(string:url)!))
+    }
+
+    public class func GET(url:String, query:[String:String]) -> Promise<UIImage> {
+        return promise(OMGHTTPURLRQ.GET(url, query))
+    }
+
+    public class func POST(url:String, formData:[String:String]) -> Promise<UIImage> {
+        return promise(OMGHTTPURLRQ.POST(url, formData))
+    }
+
+    public class func POST(url:String, JSON json:[String:String]) -> Promise<UIImage> {
+        return promise(OMGHTTPURLRQ.POST(url, JSON: json))
+    }
+
+    public class func POST(url:String, multipartFormData: OMGMultipartFormData) -> Promise<UIImage> {
+        return promise(OMGHTTPURLRQ.POST(url, multipartFormData))
     }
 
     public class func promise(rq: NSURLRequest) -> Promise<UIImage> {
@@ -231,3 +245,4 @@ extension NSURLConnection {
         }
     }
 }
+#endif

@@ -1,20 +1,46 @@
 #import <CoreLocation/CLLocationManager.h>
 #import <PromiseKit/fwd.h>
 
+/**
+ To import the `CLLocationManager` category:
 
+    pod "PromiseKit/CLLocationManager"
+
+ Or you can import all categories on `CoreLocation`:
+
+    pod "PromiseKit/CoreLocation"
+*/
 @interface CLLocationManager (PromiseKit)
 
 /**
- Determines the user’s location and then's it.
+ Determines the device’s location waiting until the positional accuracy
+ of the measured locations is better than 500 meters.
 
- Since the delegate gives us an array of locations, we then the most
- recent location, and then the whole array as the second parameter.
+ If your app has not yet asked the user for locational determination
+ permissions, PromiseKit calls `+requestWhenInUseAuthorization`, if
+ you need always permissions, you must call this yourself before
+ any use of this method, or the promise will be rejected.
 
- If the user has not yet authorized your app to monitor the location of
- the phone and this is iOS 8, we wait for the user to authorize the app
- to locate the user *during use*. If you don’t want during use then you
- must write your own promise. Please submit your work back to PromiseKit.
+ @return A promise that thens two parameters:
+ 1. The most recent `CLLocation`.
+ 2. An array of all recent `CLLocations`.
 */
 + (PMKPromise *)promise;
+
+
+/**
+ 0.2.4.6.8.0.2.4.6.8.0.2.4.6.8.0.2.4.6.8.0.2.4.6.8.0.2.4.6.8.0.2.4.6.8.0.2
+ Determines the device’s location using the provided block to determine
+ which locations are acceptable.
+
+ With this variant you can wait for good accuracy or accept bad
+ accuracy (at your own determination) if the `CLLocationManager`
+ is taking too long. For example, the user is not outside so you
+ will never get 10 meter accuracy, but it would be nice to wait
+ a little just in case.
+
+ @see +promise
+*/
++ (PMKPromise *)until:(BOOL(^)(CLLocation *))isLocationGoodBlock;
 
 @end
