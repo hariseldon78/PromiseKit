@@ -19,7 +19,7 @@ private class UIActionSheetProxy: NSObject, UIActionSheetDelegate {
 extension UIActionSheet {
     public func promiseInView(view:UIView) -> Promise<Int> {
         let deferred = Promise<Int>.defer()
-        delegate = UIActionSheetProxy(fulfiller: deferred.fulfill)
+        delegate = UIActionSheetProxy(deferred.fulfill)
         showInView(view)
         return deferred.promise
     }

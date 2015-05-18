@@ -19,7 +19,7 @@ private class UIAlertViewProxy: NSObject, UIAlertViewDelegate {
 extension UIAlertView {
     public func promise() -> Promise<Int> {
         let deferred = Promise<Int>.defer()
-        delegate = UIAlertViewProxy(fulfiller: deferred.fulfill)
+        delegate = UIAlertViewProxy(deferred.fulfill)
         show()
         return deferred.promise
     }
